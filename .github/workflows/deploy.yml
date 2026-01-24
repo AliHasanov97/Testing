@@ -111,47 +111,91 @@ jobs:
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT }}
         script: |
+          echo "=== Starting deployment ==="
+
           # Create app directory
           mkdir -p ~/testing-app
           cd ~/testing-app
+          echo "Working directory: $(pwd)"
 
           # Move files from /tmp
-          mv /tmp/testing-app.tar.gz . || true
-          mv /tmp/docker-compose.yml . || true
+          echo "Moving files from /tmp..."
+          mv /tmp/testing-app.tar.gz . || echo "Warning: testing-app.tar.gz not found in /tmp"
+          mv /tmp/docker-compose.yml . || echo "Warning: docker-compose.yml not found in /tmp"
+
+          echo "Files in current directory:"
+          ls -lah
 
           # Stop and remove old containers
-          docker-compose down || true
+          echo "Stopping old containers..."
+          docker-compose down 2>/dev/null || true
 
           # Remove old testing-app containers
-          docker rm -f testing-app || true
+          echo "Removing old containers..."
+          docker rm -f testing-app 2>/dev/null || true
 
           # Remove old testing-app images
-          docker rmi testing-app:latest || true
+          echo "Removing old images..."
+          docker rmi testing-app:latest 2>/dev/null || true
 
           # Load new Docker image
-          docker load < testing-app.tar.gz
+          echo "Loading new Docker image..."
+          if [ -f testing-app.tar.gz ]; then
+            docker load < testing-app.tar.gz
+            echo "Docker image loaded successfully"
+          else
+            echo "ERROR: testing-app.tar.gz not found!"
+            exit 1
+          fi
+
+          # Check loaded images
+          echo "Docker images:"
+          docker images | grep testing
 
           # Start new containers
-          docker-compose up -d
+          echo "Starting containers with docker-compose..."
+          if [ -f docker-compose.yml ]; then
+            docker-compose up -d
+            echo "Containers started"
+          else
+            echo "ERROR: docker-compose.yml not found!"
+            exit 1
+          fi
+
+          # Wait for container to start
+          sleep 3
+
+          # Check container status
+          echo "Container status:"
+          docker ps -a | grep testing || echo "No testing containers found"
+
+          # Show recent logs
+          echo "Recent logs:"
+          docker logs testing-app --tail 20 2>/dev/null || echo "Could not get logs"
 
           # Clean up unused images
+          echo "Cleaning up unused images..."
           docker image prune -af
 
           # Remove the tar.gz file
           rm -f testing-app.tar.gz
 
-          echo "Deployment completed successfully!"
+          echo "=== Deployment completed ==="
 
-    - name: Verify deployment
+    - name: Final verification
       uses: appleboy/ssh-action@v1.0.3
+      continue-on-error: true
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT }}
         script: |
-          echo "Checking container status..."
-          docker ps | grep testing-app
+          echo "=== Final Verification ==="
+          echo "Container status:"
+          docker ps | grep testing-app || echo "Container not running"
           echo ""
-          echo "Checking recent logs..."
-          docker logs testing-app --tail 30
+          echo "All containers:"
+          docker ps -a
+          echo ""
+          echo "Application should be accessible at: http://YOUR_VPS_IP"
