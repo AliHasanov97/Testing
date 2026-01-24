@@ -115,14 +115,14 @@ jobs:
         target: "~/testing-app/"
         strip_components: 0
 
-    - name: Copy docker-compose to VPS
+    - name: Copy docker compose to VPS
       uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.VPS_HOST }}
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT }}
-        source: "docker-compose.yml"
+        source: "docker compose.yml"
         target: "~/testing-app/"
         strip_components: 0
 
@@ -144,7 +144,7 @@ jobs:
 
           # Stop and remove old containers
           echo "Stopping old containers..."
-          docker-compose down 2>/dev/null || true
+          docker compose down 2>/dev/null || true
 
           # Remove old testing-app containers
           echo "Removing old containers..."
@@ -169,12 +169,12 @@ jobs:
           docker images | grep testing
 
           # Start new containers
-          echo "Starting containers with docker-compose..."
-          if [ -f docker-compose.yml ]; then
-            docker-compose up -d
+          echo "Starting containers with docker compose..."
+          if [ -f docker compose.yml ]; then
+            docker compose up -d
             echo "Containers started"
           else
-            echo "ERROR: docker-compose.yml not found!"
+            echo "ERROR: docker compose.yml not found!"
             exit 1
           fi
 
