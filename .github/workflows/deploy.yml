@@ -170,11 +170,11 @@ jobs:
 
           # Start new containers
           echo "Starting containers with docker compose..."
-          if [ -f docker compose.yml ]; then
+          if [ -f docker-compose.yml ]; then
             docker compose up -d
             echo "Containers started"
           else
-            echo "ERROR: docker compose.yml not found!"
+            echo "ERROR: docker-compose.yml not found!"
             exit 1
           fi
 
