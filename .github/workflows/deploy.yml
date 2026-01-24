@@ -52,9 +52,9 @@ jobs:
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
-    - name: Build Docker image
+    - name: Build Docker image (no cache)
       run: |
-        docker build -t ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
+        docker build --no-cache -t ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
 
     - name: Save Docker image
       run: |
@@ -103,17 +103,23 @@ jobs:
         script: |
           cd /home/${{ secrets.VPS_USERNAME }}/testing-app
 
-          # Load Docker image
-          docker load < testing-app.tar.gz
-
           # Stop and remove old containers
           docker-compose down || true
+
+          # Remove old testing-app containers
+          docker rm -f testing-app || true
+
+          # Remove old testing-app images
+          docker rmi testing-app:latest || true
+
+          # Load new Docker image
+          docker load < testing-app.tar.gz
 
           # Start new containers
           docker-compose up -d
 
-          # Clean up old images
-          docker image prune -f
+          # Clean up unused images
+          docker image prune -af
 
           # Remove the tar.gz file
           rm -f testing-app.tar.gz
@@ -130,5 +136,6 @@ jobs:
         script: |
           echo "Checking container status..."
           docker ps | grep testing-app
-          echo "Checking logs..."
-          docker logs testing-app --tail 50
+          echo ""
+          echo "Checking recent logs..."
+          docker logs testing-app --tail 30
