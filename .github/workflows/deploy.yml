@@ -93,17 +93,6 @@ jobs:
         echo "Looking for testing-app.tar.gz:"
         find . -name "testing-app.tar.gz" -type f
 
-    - name: Create app directory on VPS
-      uses: appleboy/ssh-action@v1.0.3
-      with:
-        host: ${{ secrets.VPS_HOST }}
-        username: ${{ secrets.VPS_USERNAME }}
-        key: ${{ secrets.VPS_SSH_KEY }}
-        port: ${{ secrets.VPS_PORT }}
-        script: |
-          mkdir -p ~/testing-app
-          echo "App directory created"
-
     - name: Copy Docker image to VPS
       uses: appleboy/scp-action@v0.1.7
       with:
@@ -114,6 +103,8 @@ jobs:
         source: "testing-app.tar.gz"
         target: "~/testing-app/"
         strip_components: 0
+        overwrite: true
+        rm: true
 
     - name: Copy docker-compose.yml to VPS
       uses: appleboy/scp-action@v0.1.7
@@ -125,6 +116,7 @@ jobs:
         source: "docker-compose.yml"
         target: "~/testing-app/"
         strip_components: 0
+        overwrite: true
 
     - name: Deploy on VPS
       uses: appleboy/ssh-action@v1.0.3
@@ -133,9 +125,12 @@ jobs:
         username: ${{ secrets.VPS_USERNAME }}
         key: ${{ secrets.VPS_SSH_KEY }}
         port: ${{ secrets.VPS_PORT }}
+        command_timeout: 15m
         script: |
           echo "=== Starting deployment ==="
 
+          # Create and clean app directory
+          mkdir -p ~/testing-app
           cd ~/testing-app
           echo "Working directory: $(pwd)"
 
