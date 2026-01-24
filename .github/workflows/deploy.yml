@@ -82,6 +82,16 @@ jobs:
       uses: actions/download-artifact@v4
       with:
         name: docker-image
+        path: .
+
+    - name: List downloaded files
+      run: |
+        echo "Current directory:"
+        pwd
+        echo "Files in current directory:"
+        ls -lah
+        echo "Looking for testing-app.tar.gz:"
+        find . -name "testing-app.tar.gz" -type f
 
     - name: Create app directory on VPS
       uses: appleboy/ssh-action@v1.0.3
