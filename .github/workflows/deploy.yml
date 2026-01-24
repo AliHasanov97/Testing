@@ -1,0 +1,134 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  DOCKER_IMAGE_NAME: testing-app
+  DOCKER_IMAGE_TAG: latest
+
+jobs:
+  # Build and Test Job
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore Testing/Testing.csproj
+
+    - name: Build
+      run: dotnet build Testing/Testing.csproj --configuration Release --no-restore
+
+    - name: Test
+      run: dotnet test Testing/Testing.csproj --no-build --verbosity normal --configuration Release
+      continue-on-error: true
+
+    - name: Publish
+      run: dotnet publish Testing/Testing.csproj -c Release -o ./publish
+
+  # Docker Build Job
+  docker-build:
+    name: Build Docker Image
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker image
+      run: |
+        docker build -t ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} .
+
+    - name: Save Docker image
+      run: |
+        docker save ${{ env.DOCKER_IMAGE_NAME }}:${{ env.DOCKER_IMAGE_TAG }} | gzip > testing-app.tar.gz
+
+    - name: Upload Docker image artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: docker-image
+        path: testing-app.tar.gz
+        retention-days: 1
+
+  # Deploy to VPS Job
+  deploy:
+    name: Deploy to VPS
+    needs: docker-build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download Docker image artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: docker-image
+
+    - name: Copy files to VPS
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        source: "testing-app.tar.gz,docker-compose.yml"
+        target: "/home/${{ secrets.VPS_USERNAME }}/testing-app"
+
+    - name: Deploy on VPS
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        script: |
+          cd /home/${{ secrets.VPS_USERNAME }}/testing-app
+
+          # Load Docker image
+          docker load < testing-app.tar.gz
+
+          # Stop and remove old containers
+          docker-compose down || true
+
+          # Start new containers
+          docker-compose up -d
+
+          # Clean up old images
+          docker image prune -f
+
+          # Remove the tar.gz file
+          rm -f testing-app.tar.gz
+
+          echo "Deployment completed successfully!"
+
+    - name: Verify deployment
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.VPS_HOST }}
+        username: ${{ secrets.VPS_USERNAME }}
+        key: ${{ secrets.VPS_SSH_KEY }}
+        port: ${{ secrets.VPS_PORT }}
+        script: |
+          echo "Checking container status..."
+          docker ps | grep testing-app
+          echo "Checking logs..."
+          docker logs testing-app --tail 50

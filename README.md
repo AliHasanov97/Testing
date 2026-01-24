@@ -111,12 +111,92 @@ docker images
 docker image prune -a
 ```
 
+## CI/CD ilə Avtomatik Deployment
+
+Proyekt GitHub Actions ilə avtomatik deploy olunar. Hər dəfə `main` branch-a kod push edəndə:
+
+1. ✅ Build və Test
+2. ✅ Docker Image yaradılır
+3. ✅ VPS-ə avtomatik deploy edilir
+
+### GitHub Secrets Konfiqurasiyası
+
+GitHub repo-nuzda aşağıdakı secrets-ləri əlavə edin:
+`Settings → Secrets and variables → Actions → New repository secret`
+
+| Secret Adı | Təsvir | Nümunə |
+|------------|--------|---------|
+| `VPS_HOST` | VPS IP ünvanı | `192.168.1.100` |
+| `VPS_USERNAME` | VPS istifadəçi adı | `ubuntu` |
+| `VPS_SSH_KEY` | SSH private key | RSA private key content |
+| `VPS_PORT` | SSH port (default: 22) | `22` |
+
+### SSH Key yaratmaq
+
+VPS-də SSH key yaradın və GitHub-a əlavə edin:
+
+```bash
+# Local kompüterdə SSH key yaradın
+ssh-keygen -t rsa -b 4096 -C "github-actions"
+
+# Public key-i VPS-ə köçürün
+ssh-copy-id -i ~/.ssh/id_rsa.pub username@VPS_IP
+
+# Private key-i kopyalayın və GitHub Secrets-ə əlavə edin
+cat ~/.ssh/id_rsa
+```
+
+### Manual Deployment (deploy.sh ilə)
+
+Avtomatik CI/CD olmadan manual deploy etmək üçün:
+
+```bash
+# VPS-də
+chmod +x deploy.sh
+./deploy.sh
+```
+
+### CI/CD Pipeline nə edir?
+
+```
+Push to main branch
+    ↓
+Build .NET Application
+    ↓
+Run Tests (optional)
+    ↓
+Build Docker Image
+    ↓
+Upload to GitHub Artifacts
+    ↓
+Copy to VPS via SCP
+    ↓
+Deploy on VPS
+    ↓
+Verify Deployment
+```
+
+### Workflow-u manual işə salmaq
+
+GitHub repo-da: `Actions → CI/CD Pipeline → Run workflow`
+
 ## Proyekti yeniləmək
 
+### Avtomatik (CI/CD ilə)
+```bash
+git add .
+git commit -m "Update"
+git push origin main
+# GitHub Actions avtomatik deploy edəcək
+```
+
+### Manual
 ```bash
 # Yeni kod dəyişiklikləri VPS-ə köçürüldükdən sonra:
 docker-compose down
 docker-compose up -d --build
+# və ya
+./deploy.sh
 ```
 
 ## Firewall konfiqurasiyası
