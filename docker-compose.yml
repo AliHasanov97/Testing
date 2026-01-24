@@ -1,27 +1,127 @@
 version: '3.8'
 
+# ==============================================
+# FULL ENTERPRISE DOCKER STACK
+# ==============================================
+# PostgreSQL + pgAdmin + Application + Health Checks
+# Phase 1: Core Infrastructure
+
 services:
+  # ==============================================
+  # DATABASE - PostgreSQL
+  # ==============================================
+  postgres:
+    image: postgres:${POSTGRES_VERSION:-16-alpine}
+    container_name: ${APP_NAME:-testing-app}-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-testing_db}
+      POSTGRES_USER: ${POSTGRES_USER:-testing_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "-E UTF8 --locale=en_US.UTF-8"
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./docker/postgres/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-testing_user} -d ${POSTGRES_DB:-testing_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '${DB_CPU_LIMIT:-2.0}'
+          memory: ${DB_MEMORY_LIMIT:-1G}
+        reservations:
+          cpus: '0.5'
+          memory: ${DB_MEMORY_RESERVATION:-512M}
+
+  # ==============================================
+  # DATABASE MANAGEMENT - pgAdmin
+  # ==============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: ${APP_NAME:-testing-app}-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@example.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+  # ==============================================
+  # APPLICATION - ASP.NET Core
+  # ==============================================
   webapp:
     build:
       context: .
       dockerfile: Dockerfile
-    image: testing-app:latest
-    container_name: testing-app
+    image: ${APP_NAME:-testing-app}:latest
+    container_name: ${APP_NAME:-testing-app}
+    restart: unless-stopped
     ports:
       - "80:8080"
     environment:
-      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_ENVIRONMENT=${APP_ENVIRONMENT:-Production}
       - ASPNETCORE_URLS=http://+:8080
-    restart: unless-stopped
+      - ConnectionStrings__DefaultConnection=Host=${POSTGRES_HOST:-postgres};Port=${POSTGRES_PORT:-5432};Database=${POSTGRES_DB:-testing_db};Username=${POSTGRES_USER:-testing_user};Password=${POSTGRES_PASSWORD}
+      - TZ=${TZ:-Asia/Baku}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
       timeout: 3s
       retries: 3
       start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
-      - app-network
+      - backend
+      - frontend
+    deploy:
+      resources:
+        limits:
+          cpus: '${APP_CPU_LIMIT:-1.0}'
+          memory: ${APP_MEMORY_LIMIT:-512M}
+        reservations:
+          cpus: '0.25'
+          memory: ${APP_MEMORY_RESERVATION:-256M}
 
+# ==============================================
+# NETWORKS
+# ==============================================
 networks:
-  app-network:
+  frontend:
     driver: bridge
+  backend:
+    driver: bridge
+    internal: false  # Will be true in production with Nginx
+
+# ==============================================
+# VOLUMES
+# ==============================================
+volumes:
+  postgres-data:
+    driver: local
+  pgadmin-data:
+    driver: local
