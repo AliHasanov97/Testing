@@ -8,7 +8,7 @@ services:
     image: testing-app:latest
     container_name: testing-app
     ports:
-      - "80:8080"
+      - "8081:8080"
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://+:8080
